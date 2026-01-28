@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -11,7 +12,9 @@ export default function Home() {
       <section className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <h1 className="mb-2 text-3xl font-bold text-foreground">100% Welcome Bonus</h1>
         <p className="mb-6 text-muted-foreground">Up to $500 on your first deposit</p>
-        <Button size="lg">Play Now</Button>
+        <Link href="/Games">
+          <Button size="lg">Play Now</Button>
+        </Link>
       </section>
 
       <footer className="px-6 py-4 text-center text-xs text-muted-foreground">
