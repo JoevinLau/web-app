@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+
+
+on:
+
+  push:
+
+    branches: [ "main" ]
+
+  pull_request:
+
+    branches: [ "main" ]
+
+
+
+jobs:
+
+  build-and-test:
+
+    runs-on: ubuntu-latest
+
+
+
+    steps:
+
+      - name: Checkout code
+
+        uses: actions/checkout@v4
+
+
+
+      - name: Set up Node.js
+
+        uses: actions/setup-node@v4
+
+        with:
+
+          node-version: "18"
+
+
+
+      - name: Install Dependencies
+
+        run: npm install
+
+
+
+      - name: Run Tests
+
+        run: npm test --if-present
+
+
+
+      - name: Log in to Docker Hub
+
+        uses: docker/login-action@v3
+
+        with:
+
+          username: nurulafiqah
+
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+
+
+      - name: Build and push Docker image
+
+        uses: docker/build-push-action@v5
+
+        with:
+
+          context: .
+
+          push: true
+
+          tags: nurulafiqah/casino-web-app:latest
