@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
+// --- TYPES ---
 interface Ball {
   id: number;
   x: number;
@@ -22,8 +23,17 @@ interface Peg {
   y: number;
 }
 
-// 15 Multipliers = 14 Rows
-// 17 Multipliers = 16 Rows
+// New interface for the floating win text
+interface FloatText {
+  id: number;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number; // For fading out
+  alpha: number;
+}
+
 const MULTIPLIERS = {
   low: [5.6, 2.1, 1.1, 1, 0.5, 1, 0.3, 0.5, 1, 0.3, 0.5, 1, 1.1, 2.1, 5.6],
   medium: [13, 3, 1.3, 0.7, 0.4, 0.2, 0.2, 0.2, 0.2, 0.2, 0.4, 0.7, 1.3, 3, 13],
@@ -31,10 +41,10 @@ const MULTIPLIERS = {
 };
 
 const getSlotColor = (multiplier: number) => {
-  if (multiplier >= 10) return "#ef4444"; // Red-500
-  if (multiplier >= 3) return "#f97316";  // Orange-500
-  if (multiplier >= 1) return "#eab308";  // Yellow-500
-  return "#facc15";                       // Yellow-400
+  if (multiplier >= 10) return "#ef4444"; // Red
+  if (multiplier >= 3) return "#f97316";  // Orange
+  if (multiplier >= 1) return "#eab308";  // Yellow
+  return "#facc15";                       // Light Yellow
 };
 
 const PlinkoGame: React.FC = () => {
@@ -43,10 +53,12 @@ const PlinkoGame: React.FC = () => {
   const [betAmount, setBetAmount] = useState(1);
   const [balance, setBalance] = useState(1000);
   const [lastWin, setLastWin] = useState<number | null>(null);
+  
+  // Pegs state
   const [pegs, setPegs] = useState<Peg[]>([]);
   const [isAutoRunning, setIsAutoRunning] = useState(false);
 
-  // Determine rows based on risk (Low/Med = 14, High = 16)
+  // Rows based on risk
   const rows = risk === "high" ? 16 : 14;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,18 +67,21 @@ const PlinkoGame: React.FC = () => {
 
   // Physics Refs
   const ballsRef = useRef<Ball[]>([]);
+  const floatsRef = useRef<FloatText[]>([]); // Ref for floating text
   const ballIdRef = useRef(0);
+  const floatIdRef = useRef(0);
+  
+  // We use refs for balance/bet inside the loop to avoid stale closures
   const balanceRef = useRef(balance);
   const betRef = useRef(betAmount);
 
   useEffect(() => { balanceRef.current = balance; }, [balance]);
   useEffect(() => { betRef.current = betAmount; }, [betAmount]);
 
-  // --- COMPACT DIMENSIONS ---
+  // --- DIMENSIONS ---
   const SPACING = 30; 
   const CANVAS_WIDTH = 650; 
   const CANVAS_HEIGHT = 60 + (rows * SPACING) + 50; 
-  
   const PEG_RADIUS = 3;
   const BALL_RADIUS = 5.5; 
   const GRAVITY = 0.18;    
@@ -137,13 +152,12 @@ const PlinkoGame: React.FC = () => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Slot Y Position
     const slotY = 50 + (rows * SPACING) + 20; 
 
     const gameLoop = () => {
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       
-      // Background (Dark Navy for the game board itself)
+      // Background
       ctx.fillStyle = "#0f1728"; 
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -158,7 +172,6 @@ const PlinkoGame: React.FC = () => {
       // Draw Multipliers
       const boxWidth = SPACING - 4;
       const boxHeight = 22;
-      
       const bottomRowPegs = rows + 2; 
       const bottomRowWidth = (bottomRowPegs - 1) * SPACING;
       const startX = (CANVAS_WIDTH - bottomRowWidth) / 2;
@@ -169,20 +182,10 @@ const PlinkoGame: React.FC = () => {
 
         ctx.fillStyle = getSlotColor(mult);
         ctx.beginPath();
-        if (ctx.roundRect) {
-            ctx.roundRect(x - boxWidth / 2, y, boxWidth, boxHeight, 4);
-        } else {
-            ctx.rect(x - boxWidth / 2, y, boxWidth, boxHeight);
-        }
+        if (ctx.roundRect) ctx.roundRect(x - boxWidth / 2, y, boxWidth, boxHeight, 4);
+        else ctx.rect(x - boxWidth / 2, y, boxWidth, boxHeight);
         ctx.fill();
         
-        ctx.shadowColor = "rgba(0,0,0,0.3)";
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 2;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-
         ctx.fillStyle = "#000";
         ctx.font = "bold 9px Arial";
         ctx.textAlign = "center";
@@ -190,7 +193,7 @@ const PlinkoGame: React.FC = () => {
         ctx.fillText(`${mult}x`, x, y + boxHeight/2 + 1);
       });
 
-      // Physics Update
+      // --- PHYSICS UPDATE ---
       const updatedBalls = ballsRef.current.map((ball) => {
           if (!ball.active) return ball;
           let newBall = { ...ball };
@@ -217,26 +220,38 @@ const PlinkoGame: React.FC = () => {
               const speed = Math.sqrt(newBall.vx**2 + newBall.vy**2);
               const bounceSpeed = speed * BOUNCE;
               const randomDeflection = (Math.random() - 0.5) * 1.5; 
-              
               newBall.vx = Math.cos(angle + randomDeflection) * bounceSpeed + (Math.random() - 0.5);
               newBall.vy = Math.sin(angle) * bounceSpeed;
             }
           });
 
+          // PAYOUT Logic
           if (newBall.y > slotY) {
              const relativeX = newBall.x - startX;
              const index = Math.floor(relativeX / SPACING);
-
+             
              if (index >= 0 && index < multipliers.length) {
-                 const win = newBall.val * multipliers[index];
+                 const multiplier = multipliers[index];
+                 const win = newBall.val * multiplier;
+                 
                  setBalance(prev => prev + win);
-                 setLastWin(win);
+                 setLastWin(win); // Update React State
+
+                 // Add Floating Text
+                 floatsRef.current.push({
+                    id: floatIdRef.current++,
+                    x: newBall.x,
+                    y: newBall.y - 20,
+                    text: `+$${win.toFixed(2)}`,
+                    color: win >= newBall.val ? "#22c55e" : "#ef4444", // Green if profit, Red if loss/less
+                    life: 1.0,
+                    alpha: 1
+                 });
              }
              newBall.active = false;
           }
           
           if (newBall.y > CANVAS_HEIGHT) newBall.active = false;
-
           return newBall;
       }).filter(b => b.active);
 
@@ -254,6 +269,28 @@ const PlinkoGame: React.FC = () => {
         ctx.fill();
       });
 
+      // --- RENDER FLOATING TEXT ---
+      // Update and draw floating text
+      const updatedFloats = floatsRef.current.map(f => {
+          f.y -= 1; // Move up
+          f.life -= 0.02; // Fade out
+          f.alpha = Math.max(0, f.life);
+          
+          ctx.save();
+          ctx.globalAlpha = f.alpha;
+          ctx.fillStyle = f.color;
+          ctx.font = "bold 12px Arial";
+          ctx.textAlign = "center";
+          ctx.shadowColor = "black";
+          ctx.shadowBlur = 2;
+          ctx.fillText(f.text, f.x, f.y);
+          ctx.restore();
+          
+          return f;
+      }).filter(f => f.life > 0);
+      
+      floatsRef.current = updatedFloats;
+
       animationRef.current = requestAnimationFrame(gameLoop);
     };
 
@@ -264,118 +301,188 @@ const PlinkoGame: React.FC = () => {
   return (
     <div className="h-screen w-full bg-[#0b1120] flex flex-col font-sans text-white overflow-hidden">
       
-      {/* --- HEADER (MATCHING BLACKJACK THEME) --- */}
+      {/* --- HEADER --- */}
       <div className="h-14 bg-stone-950 px-4 flex justify-between items-center border-b border-stone-800 shadow-xl z-20 shrink-0">
         <Link href="/Games">
-          <Button variant="ghost" size="sm" className="text-stone-400 hover:text-white gap-2">
-            <ArrowLeft className="h-4 w-4" /> <span className="hidden md:inline">Lobby</span>
+          <Button variant="ghost" size="sm" className="text-stone-400 hover:text-white gap-2 pl-0">
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Lobby</span>
           </Button>
         </Link>
-        <div className="text-yellow-500 font-bold tracking-widest text-sm uppercase hidden md:block">
+        <div className="text-yellow-500 font-bold tracking-widest text-sm uppercase">
           Plinko
         </div>
-        <div className="flex items-center gap-3">
-            <span className="text-stone-400 text-sm uppercase tracking-wider hidden sm:inline">Balance</span>
-            <div className="bg-black/50 px-4 py-1 rounded-full border border-yellow-500/30 text-yellow-400 font-mono font-bold text-sm">
-            ${balance.toFixed(2)}
-            </div>
+        <div className="bg-black/50 px-3 py-1 rounded-full border border-yellow-500/30 text-yellow-400 font-mono font-bold text-sm">
+           ${balance.toFixed(2)}
         </div>
       </div>
 
-      {/* --- MAIN CONTENT --- */}
-      <div className="flex-1 flex flex-col items-center justify-center p-2 overflow-hidden">
+      {/* --- CONTENT CONTAINER --- */}
+      <div className="flex-1 w-full h-full relative overflow-hidden">
         
-        <div className="flex flex-col-reverse lg:flex-row gap-4 w-full max-w-5xl items-stretch h-full lg:h-auto max-h-[90vh]">
-          
-          {/* LEFT PANEL: CONTROLS */}
-          <Card className="lg:w-72 p-4 bg-[#1a2333] border-none shadow-xl flex flex-col gap-4 rounded-xl shrink-0 overflow-y-auto">
-              
-              {/* Mode */}
-              <div className="bg-[#0f1728] p-1 rounded-full border border-gray-800">
-                  <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as any)} className="w-full">
-                      <ToggleGroupItem value="manual" className="flex-1 rounded-full h-8 text-xs data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-gray-400 font-bold transition-all">Manual</ToggleGroupItem>
-                      <ToggleGroupItem value="auto" className="flex-1 rounded-full h-8 text-xs data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-gray-400 font-bold transition-all">Auto</ToggleGroupItem>
-                  </ToggleGroup>
-              </div>
+        {/* ========================================================= */}
+        {/* MOBILE LAYOUT (Stack: Board Top, Controls Bottom)         */}
+        {/* ========================================================= */}
+        <div className="md:hidden flex flex-col h-full">
+            
+            {/* GAME BOARD (Takes remaining space) */}
+            <div className="flex-1 bg-[#1a2333] flex items-center justify-center p-2 overflow-hidden relative">
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <canvas
+                        ref={canvasRef}
+                        width={CANVAS_WIDTH}
+                        height={CANVAS_HEIGHT}
+                        className="max-w-full max-h-full rounded-lg shadow-2xl"
+                    />
+                </div>
+            </div>
 
-              {/* Bet Input */}
-              <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bet Amount</label>
-                  <div className="flex gap-1">
-                      <div className="relative flex-1">
-                          <input 
-                              type="number"
-                              min={1}
-                              value={betAmount}
-                              onChange={(e) => setBetAmount(Math.max(1, Number(e.target.value)))}
-                              className="w-full bg-[#0f1728] border border-gray-700 rounded-md py-2 pl-3 pr-2 font-bold text-white text-sm focus:border-[#22c55e] focus:outline-none transition-colors"
-                          />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#22c55e] font-black text-xs pointer-events-none">$</span>
-                      </div>
-                      <Button variant="outline" onClick={() => setBetAmount(b => Math.max(1, b/2))} className="bg-[#2f3b52] border-none text-white hover:bg-[#3f4b62] h-9 px-2 text-xs font-bold">½</Button>
-                      <Button variant="outline" onClick={() => setBetAmount(b => b*2)} className="bg-[#2f3b52] border-none text-white hover:bg-[#3f4b62] h-9 px-2 text-xs font-bold">2×</Button>
-                  </div>
-              </div>
+            {/* CONTROLS (Fixed Bottom Sheet style) */}
+            <div className="bg-stone-900 border-t border-stone-700 p-4 pb-8 z-30 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+                {/* Stats Row */}
+                <div className="flex justify-between items-center mb-3 px-1">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-stone-400 font-bold uppercase">Last Win</span>
+                        <span className={`text-sm font-bold ${lastWin && lastWin > 0 ? "text-yellow-400" : "text-stone-600"}`}>
+                            {lastWin ? `$${lastWin.toFixed(2)}` : "-"}
+                        </span>
+                    </div>
+                    
+                    {/* Mode Toggle */}
+                    <div className="flex bg-stone-950 rounded-md p-0.5 border border-stone-800">
+                        <button onClick={() => setMode("manual")} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${mode === "manual" ? "bg-[#22c55e] text-black" : "text-stone-500"}`}>MANUAL</button>
+                        <button onClick={() => setMode("auto")} className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${mode === "auto" ? "bg-[#22c55e] text-black" : "text-stone-500"}`}>AUTO</button>
+                    </div>
+                </div>
 
-              {/* Risk Select */}
-              <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Risk Level</label>
-                  <ToggleGroup type="single" value={risk} onValueChange={(v) => v && setRisk(v as any)} className="w-full gap-1">
-                      <ToggleGroupItem value="low" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-white font-bold rounded-md transition-all">Low</ToggleGroupItem>
-                      <ToggleGroupItem value="medium" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#eab308] data-[state=on]:text-black text-white font-bold rounded-md transition-all">Med</ToggleGroupItem>
-                      <ToggleGroupItem value="high" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#ef4444] data-[state=on]:text-white text-white font-bold rounded-md transition-all">High</ToggleGroupItem>
-                  </ToggleGroup>
-              </div>
+                {/* Inputs Row */}
+                <div className="flex gap-2 mb-3">
+                    {/* Bet */}
+                    <div className="flex-1 relative">
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[#22c55e] font-bold text-xs">$</div>
+                        <input 
+                            type="number" value={betAmount} onChange={(e) => setBetAmount(Math.max(1, Number(e.target.value)))}
+                            className="w-full bg-stone-950 border border-stone-700 rounded-md h-10 pl-6 pr-2 font-bold text-white text-sm focus:border-[#22c55e] outline-none"
+                        />
+                    </div>
+                    {/* Multipliers */}
+                    <button onClick={() => setBetAmount(b => Math.max(1, b/2))} className="bg-stone-800 border border-stone-700 text-stone-300 h-10 w-10 rounded-md font-bold text-xs">½</button>
+                    <button onClick={() => setBetAmount(b => b*2)} className="bg-stone-800 border border-stone-700 text-stone-300 h-10 w-10 rounded-md font-bold text-xs">2×</button>
+                </div>
 
-              {/* Action Button */}
-              {mode === 'manual' ? (
-                  <Button 
-                      onClick={dropBall} 
-                      disabled={balance < betAmount}
-                      className="w-full h-12 text-lg font-black bg-[#22c55e] hover:bg-[#16a34a] text-black shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-[2px] transition-all rounded-md mt-2"
-                  >
-                      BET
-                  </Button>
-              ) : (
-                  <Button 
-                      onClick={() => setIsAutoRunning(!isAutoRunning)}
-                      className={`w-full h-12 text-lg font-black shadow-[0_4px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[2px] transition-all rounded-md mt-2 text-black ${
-                          isAutoRunning 
-                          ? "bg-[#ef4444] hover:bg-[#dc2626] text-white shadow-[0_4px_0_rgb(185,28,28)]" 
-                          : "bg-[#22c55e] hover:bg-[#16a34a] shadow-[0_4px_0_rgb(21,128,61)]"
-                      }`}
-                  >
-                      {isAutoRunning ? "STOP AUTO" : "START AUTO"}
-                  </Button>
-              )}
+                {/* Risk & Play Row */}
+                <div className="flex gap-2">
+                    {/* Risk Selector */}
+                    <div className="flex-1 bg-stone-950 border border-stone-700 rounded-md p-1 flex">
+                        {(["low", "medium", "high"] as const).map((r) => (
+                            <button 
+                                key={r} 
+                                onClick={() => setRisk(r)}
+                                className={`flex-1 rounded text-[10px] font-bold uppercase transition-all ${
+                                    risk === r 
+                                    ? r === "high" ? "bg-red-600 text-white" : r === "medium" ? "bg-yellow-500 text-black" : "bg-green-600 text-white"
+                                    : "text-stone-500 hover:text-stone-300"
+                                }`}
+                            >
+                                {r}
+                            </button>
+                        ))}
+                    </div>
 
-              {/* Stats */}
-              <div className="space-y-1 pt-2 border-t border-gray-800">
-                   {lastWin !== null && (
-                      <div className="flex justify-between items-center text-xs animate-in fade-in slide-in-from-top-1">
-                          <span className="text-gray-400 font-bold">Last Win</span>
-                          <span className={`font-mono font-bold text-sm ${lastWin > 0 ? "text-[#eab308]" : "text-gray-500"}`}>
-                              ${lastWin.toFixed(2)}
-                          </span>
-                      </div>
-                   )}
-              </div>
-          </Card>
-
-          {/* RIGHT PANEL: GAME BOARD */}
-          <Card className="flex-1 bg-[#1a2333] border-none shadow-xl p-2 flex justify-center items-center overflow-hidden rounded-xl">
-              <div className="w-full flex justify-center overflow-x-auto overflow-y-hidden">
-                  <canvas
-                      ref={canvasRef}
-                      width={CANVAS_WIDTH}
-                      height={CANVAS_HEIGHT}
-                      className="max-w-full h-auto rounded-lg"
-                      style={{ maxHeight: '70vh' }}
-                  />
-              </div>
-          </Card>
-
+                    {/* Play Button */}
+                    <div className="flex-1">
+                        {mode === 'manual' ? (
+                            <button onClick={dropBall} disabled={balance < betAmount} className="w-full h-10 bg-[#22c55e] hover:bg-[#16a34a] text-black font-black rounded-md shadow-[0_3px_0_rgb(21,128,61)] active:translate-y-[3px] active:shadow-none transition-all">
+                                BET
+                            </button>
+                        ) : (
+                            <button onClick={() => setIsAutoRunning(!isAutoRunning)} className={`w-full h-10 font-black rounded-md shadow-[0_3px_0_rgba(0,0,0,0.3)] active:translate-y-[3px] active:shadow-none transition-all ${isAutoRunning ? "bg-red-600 text-white shadow-[0_3px_0_rgb(185,28,28)]" : "bg-blue-600 text-white shadow-[0_3px_0_rgb(37,99,235)]"}`}>
+                                {isAutoRunning ? "STOP" : "START"}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
+
+
+        {/* ========================================================= */}
+        {/* PC LAYOUT (Side-by-Side: Controls Left, Board Right)      */}
+        {/* ========================================================= */}
+        <div className="hidden md:flex flex-row p-4 gap-4 h-full items-center justify-center">
+            
+            {/* CONTROLS CARD */}
+            <Card className="w-80 p-6 bg-[#1a2333] border-none shadow-xl flex flex-col gap-6 rounded-xl h-fit">
+                {/* Mode */}
+                <div className="bg-[#0f1728] p-1 rounded-lg border border-gray-800">
+                    <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as any)} className="w-full">
+                        <ToggleGroupItem value="manual" className="flex-1 h-8 text-[10px] data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-gray-400 font-bold transition-all">Manual</ToggleGroupItem>
+                        <ToggleGroupItem value="auto" className="flex-1 h-8 text-[10px] data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-gray-400 font-bold transition-all">Auto</ToggleGroupItem>
+                    </ToggleGroup>
+                </div>
+
+                {/* Bet Input */}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bet Amount</label>
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <input 
+                                type="number" min={1} value={betAmount} onChange={(e) => setBetAmount(Math.max(1, Number(e.target.value)))}
+                                className="w-full bg-[#0f1728] border border-gray-700 rounded-md h-10 pl-6 pr-2 font-bold text-white text-sm focus:border-[#22c55e] outline-none"
+                            />
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#22c55e] font-black text-xs">$</span>
+                        </div>
+                        <Button variant="outline" onClick={() => setBetAmount(b => Math.max(1, b/2))} className="bg-[#2f3b52] border-none text-white hover:bg-[#3f4b62] h-10 w-10 p-0 text-xs font-bold">½</Button>
+                        <Button variant="outline" onClick={() => setBetAmount(b => b*2)} className="bg-[#2f3b52] border-none text-white hover:bg-[#3f4b62] h-10 w-10 p-0 text-xs font-bold">2×</Button>
+                    </div>
+                </div>
+
+                {/* Risk Select */}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Risk Level</label>
+                    <ToggleGroup type="single" value={risk} onValueChange={(v) => v && setRisk(v as any)} className="w-full gap-1">
+                        <ToggleGroupItem value="low" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-white font-bold rounded-md">Low</ToggleGroupItem>
+                        <ToggleGroupItem value="medium" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#eab308] data-[state=on]:text-black text-white font-bold rounded-md">Med</ToggleGroupItem>
+                        <ToggleGroupItem value="high" className="flex-1 h-8 text-xs bg-[#2f3b52] data-[state=on]:bg-[#ef4444] data-[state=on]:text-white text-white font-bold rounded-md">High</ToggleGroupItem>
+                    </ToggleGroup>
+                </div>
+
+                {/* Play Button */}
+                <div>
+                    {mode === 'manual' ? (
+                        <Button onClick={dropBall} disabled={balance < betAmount} className="w-full h-12 text-lg font-black bg-[#22c55e] hover:bg-[#16a34a] text-black shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-[2px] transition-all rounded-md">
+                            BET
+                        </Button>
+                    ) : (
+                        <Button onClick={() => setIsAutoRunning(!isAutoRunning)} className={`w-full h-12 text-lg font-black shadow-[0_4px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-[2px] transition-all rounded-md text-black ${isAutoRunning ? "bg-[#ef4444] hover:bg-[#dc2626] text-white shadow-[0_4px_0_rgb(185,28,28)]" : "bg-[#22c55e] hover:bg-[#16a34a] shadow-[0_4px_0_rgb(21,128,61)]"}`}>
+                            {isAutoRunning ? "STOP AUTO" : "START AUTO"}
+                        </Button>
+                    )}
+                </div>
+
+                {/* Stats */}
+                <div className="pt-4 border-t border-gray-800">
+                    <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400 font-bold uppercase">Last Win</span>
+                        <span className={`font-mono font-bold text-lg ${lastWin && lastWin > 0 ? "text-yellow-400" : "text-stone-600"}`}>
+                            {lastWin ? `$${lastWin.toFixed(2)}` : "-"}
+                        </span>
+                    </div>
+                </div>
+            </Card>
+
+            {/* BOARD CARD */}
+            <Card className="flex-1 bg-[#1a2333] border-none shadow-xl p-4 flex items-center justify-center overflow-hidden rounded-xl h-full max-h-[800px]">
+                <div className="w-full h-full flex justify-center items-center">
+                    <canvas
+                        ref={canvasRef} 
+                        width={CANVAS_WIDTH}
+                        height={CANVAS_HEIGHT}
+                        className="max-w-full max-h-full rounded-lg"
+                    />
+                </div>
+            </Card>
+        </div>
+
       </div>
     </div>
   );
