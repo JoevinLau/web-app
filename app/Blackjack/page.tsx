@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, RefreshCw, Undo2 } from "lucide-react";
+import { ArrowLeft,  Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // --- TYPES ---
