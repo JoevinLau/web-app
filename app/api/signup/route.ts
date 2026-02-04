@@ -23,13 +23,20 @@ export async function POST(request: Request) {
 
     const newUserId = result.insertId;
 
-    // 3. Create a Wallet with $500 Welcome Bonus (UPDATED HERE)
+    // 3. Create a Wallet with $500 Welcome Bonus
     await query({
       query: "INSERT INTO wallets (user_id, balance) VALUES (?, ?)",
       values: [newUserId, 500.00], 
     });
 
-    return NextResponse.json({ message: "User created successfully" });
+    return NextResponse.json({ 
+        message: "User created successfully",
+        user: {
+            id: newUserId,    
+            username: username,
+            email: email
+        }
+    });
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
