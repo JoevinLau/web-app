@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Wallet, Play, CreditCard, ChevronRight, Dices } from "lucide-react";
+import { Play, ChevronRight } from "lucide-react"; // Removed Dices
 import { Button } from "@/components/ui/button";
 
 export default function GamesPage() {
@@ -41,19 +41,7 @@ export default function GamesPage() {
         </div>
 
         {/* Right: Wallet & Deposit */}
-        <div className="flex items-center gap-3">
-            {/* Balance Display */}
-            <div className="hidden sm:flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-full border border-yellow-500/30 text-yellow-400 font-mono font-bold text-sm">
-                <Wallet className="h-4 w-4" />
-                <span>$1,250.00</span>
-            </div>
-            
-            {/* Deposit Button */}
-            <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white font-bold shadow-[0_2px_0_rgb(21,128,61)] active:shadow-none active:translate-y-[2px] transition-all rounded-full h-8">
-                <CreditCard className="h-4 w-4 mr-2" />
-                Deposit
-            </Button>
-        </div>
+        {/* Removed unused wallet icon placeholder */}
       </div>
 
       {/* --- GAMES LIST SECTION --- */}

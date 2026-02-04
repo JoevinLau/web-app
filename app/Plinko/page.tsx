@@ -4,8 +4,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"; // Removed unused Card
 
 // --- TYPES ---
 interface Ball {
@@ -178,6 +177,7 @@ const PlinkoGame: React.FC = () => {
 
         ctx.fillStyle = getSlotColor(mult);
         ctx.beginPath();
+        
         if (ctx.roundRect) ctx.roundRect(x - boxWidth / 2, y, boxWidth, boxHeight, 4);
         else ctx.rect(x - boxWidth / 2, y, boxWidth, boxHeight);
         ctx.fill();
@@ -192,7 +192,7 @@ const PlinkoGame: React.FC = () => {
       // Physics
       const updatedBalls = ballsRef.current.map((ball) => {
           if (!ball.active) return ball;
-          let newBall = { ...ball };
+          const newBall = { ...ball }; // Changed let to const per lint suggestion
 
           newBall.vy += GRAVITY;
           newBall.vx *= FRICTION;
@@ -317,7 +317,7 @@ const PlinkoGame: React.FC = () => {
             <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Game Mode</label>
                 <div className="bg-[#0f1728] p-1 rounded-lg border border-stone-800">
-                    <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as any)} className="w-full">
+                    <ToggleGroup type="single" value={mode} onValueChange={(v) => v && setMode(v as "manual" | "auto")} className="w-full">
                         <ToggleGroupItem value="manual" className="flex-1 h-9 text-xs data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-stone-400 font-bold transition-all">Manual</ToggleGroupItem>
                         <ToggleGroupItem value="auto" className="flex-1 h-9 text-xs data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-stone-400 font-bold transition-all">Auto</ToggleGroupItem>
                     </ToggleGroup>
@@ -344,7 +344,7 @@ const PlinkoGame: React.FC = () => {
             {/* Risk Select */}
             <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-stone-400 uppercase tracking-wider">Risk Level</label>
-                <ToggleGroup type="single" value={risk} onValueChange={(v) => v && setRisk(v as any)} className="w-full gap-2">
+                <ToggleGroup type="single" value={risk} onValueChange={(v) => v && setRisk(v as "low" | "medium" | "high")} className="w-full gap-2">
                     <ToggleGroupItem value="low" className="flex-1 h-10 text-xs bg-[#2f3b52] data-[state=on]:bg-[#22c55e] data-[state=on]:text-black text-white font-bold rounded-md transition-all">Low</ToggleGroupItem>
                     <ToggleGroupItem value="medium" className="flex-1 h-10 text-xs bg-[#2f3b52] data-[state=on]:bg-[#eab308] data-[state=on]:text-black text-white font-bold rounded-md transition-all">Med</ToggleGroupItem>
                     <ToggleGroupItem value="high" className="flex-1 h-10 text-xs bg-[#2f3b52] data-[state=on]:bg-[#ef4444] data-[state=on]:text-white text-white font-bold rounded-md transition-all">High</ToggleGroupItem>

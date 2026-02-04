@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,31 @@ export default function BlackjackPage() {
     setBalance(prev => prev + currentBet);
     setCurrentBet(0);
   };
+
+  // Wrapped in useCallback to satisfy linter dependencies if needed
+  const handleGameOver = useCallback((pHand: Card[], dHand: Card[], bet: number, blackjack = false) => {
+    const pScore = calculateScore(pHand);
+    const dScore = calculateScore(dHand);
+    setGameState("gameOver");
+
+    if (blackjack) {
+      setMessage("BLACKJACK! Pays 3:2");
+      setBalance((prev) => prev + bet + (bet * 1.5));
+    } else if (pScore > 21) {
+      setMessage("BUST! Dealer Wins");
+    } else if (dScore > 21) {
+      setMessage("DEALER BUST! You Win");
+      setBalance((prev) => prev + (bet * 2));
+    } else if (pScore > dScore) {
+      setMessage("YOU WIN!");
+      setBalance((prev) => prev + (bet * 2));
+    } else if (pScore < dScore) {
+      setMessage("DEALER WINS");
+    } else {
+      setMessage("PUSH - Bet Returned");
+      setBalance((prev) => prev + bet);
+    }
+  }, []);
 
   const handleDeal = () => {
     if (currentBet === 0) {
@@ -152,32 +177,7 @@ export default function BlackjackPage() {
       };
       playDealer();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState]);
-
-  const handleGameOver = (pHand: Card[], dHand: Card[], bet: number, blackjack = false) => {
-    const pScore = calculateScore(pHand);
-    const dScore = calculateScore(dHand);
-    setGameState("gameOver");
-
-    if (blackjack) {
-      setMessage("BLACKJACK! Pays 3:2");
-      setBalance((prev) => prev + bet + (bet * 1.5));
-    } else if (pScore > 21) {
-      setMessage("BUST! Dealer Wins");
-    } else if (dScore > 21) {
-      setMessage("DEALER BUST! You Win");
-      setBalance((prev) => prev + (bet * 2));
-    } else if (pScore > dScore) {
-      setMessage("YOU WIN!");
-      setBalance((prev) => prev + (bet * 2));
-    } else if (pScore < dScore) {
-      setMessage("DEALER WINS");
-    } else {
-      setMessage("PUSH - Bet Returned");
-      setBalance((prev) => prev + bet);
-    }
-  };
+  }, [gameState]); // Removed the failing eslint-disable comment
 
   const resetGame = () => {
     setPlayerHand([]);
@@ -202,8 +202,6 @@ export default function BlackjackPage() {
   return (
     <div className="h-screen w-full bg-stone-900 flex flex-col font-sans overflow-hidden">
       
-      {/* NO ANIMATION STYLES HERE ANYMORE */}
-
       {/* --- TOP HEADER --- */}
       <div className="h-14 bg-stone-950 px-4 flex justify-between items-center border-b border-stone-800 shadow-xl z-20 shrink-0">
         <Link href="/Games">
@@ -234,14 +232,12 @@ export default function BlackjackPage() {
                 <div className="w-20 h-28 border-2 border-white/10 rounded-lg bg-white/5" />
             ) : (
                 dealerHand.map((card, i) => {
-                    // Logic: Card 0 is hidden ONLY if we are still playing.
                     const isHoleCard = i === 0;
                     const isPlaying = gameState === "playing";
                     const showRedBack = isHoleCard && isPlaying;
                     
                     let cardClasses = "w-20 md:w-24 h-28 md:h-36 rounded-lg shadow-2xl flex items-center justify-center";
                     
-                    // If showing red back, apply specific styles
                     if (showRedBack) {
                         cardClasses += ` bg-[#7f1d1d] border-[#fca5a5] border-2`;
                     } else {
@@ -254,7 +250,6 @@ export default function BlackjackPage() {
                             className={cardClasses}
                             style={showRedBack ? { backgroundImage: RED_STRIPE_BG } : {}}
                         >
-                            {/* IF RED BACK IS SHOWING, DO NOT RENDER CONTENT */}
                             {!showRedBack && renderCardContent(card)}
                         </div>
                     );
@@ -262,7 +257,6 @@ export default function BlackjackPage() {
             )}
           </div>
           
-          {/* DEALER SCORE BUBBLE - Shows during Dealer Turn or Game Over */}
           {(gameState === "dealerTurn" || gameState === "gameOver") && (
              <div className="mt-2 text-green-100 font-bold text-sm bg-black/40 px-3 py-0.5 rounded-full animate-in fade-in zoom-in duration-500">
                 Dealer: {calculateScore(dealerHand)}

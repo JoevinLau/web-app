@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react"; // Removed useEffect
 import Link from "next/link";
-import { ArrowLeft, Play, HandCoins, Skull, Footprints } from "lucide-react";
+import { ArrowLeft, Skull, Footprints } from "lucide-react"; // Removed unused icons
 import { Button } from "@/components/ui/button";
 
 // --- CONFIGURATION ---
