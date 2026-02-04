@@ -28,6 +28,12 @@ export default function SignupPage() {
             return;
         }
 
+        if (data.user) {
+            localStorage.setItem("user", JSON.stringify(data.user));
+        } else {
+            // Fallback if API doesn't return the full user object
+            localStorage.setItem("user", JSON.stringify({ username, email }));
+        }
       
         alert(`Account created successfully! Welcome, ${username}.`);
         router.push("/Games");
