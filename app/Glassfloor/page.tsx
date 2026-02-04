@@ -6,6 +6,7 @@ import { ArrowLeft, Play, HandCoins, Skull, Footprints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // --- CONFIGURATION ---
+// -testing
 const TOTAL_STEPS = 9; 
 const MULTIPLIER = 2; 
 const CARD_WIDTH = 96; // 96px (w-24)
