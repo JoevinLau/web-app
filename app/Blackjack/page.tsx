@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // Added for redirect
 import { ArrowLeft, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -48,14 +49,38 @@ const calculateScore = (hand: Card[]) => {
 };
 
 export default function BlackjackPage() {
+  const router = useRouter();
+  
   // --- STATE ---
+  const [user, setUser] = useState<any>(null); // Added User State
   const [deck, setDeck] = useState<Card[]>([]);
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
   const [dealerHand, setDealerHand] = useState<Card[]>([]);
   const [gameState, setGameState] = useState<GameState>("betting");
-  const [balance, setBalance] = useState(1000);
+  const [balance, setBalance] = useState(0); // Init at 0, fetch later
   const [currentBet, setCurrentBet] = useState(0);
   const [message, setMessage] = useState("");
+
+  // --- INIT: FETCH USER & BALANCE ---
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+        router.push("/Login");
+        return;
+    }
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
+    
+    // Fetch initial balance
+    fetch('/api/wallet', {
+        method: 'POST',
+        body: JSON.stringify({ userId: parsedUser.id, action: 'balance' })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.balance !== undefined) setBalance(parseFloat(data.balance));
+    });
+  }, []);
 
   // --- ACTIONS ---
 
@@ -71,36 +96,84 @@ export default function BlackjackPage() {
     setCurrentBet(0);
   };
 
-  // Wrapped in useCallback to satisfy linter dependencies if needed
-  const handleGameOver = useCallback((pHand: Card[], dHand: Card[], bet: number, blackjack = false) => {
+  // --- DB TRANSACTION HELPERS ---
+  const processTransaction = async (action: 'bet' | 'payout', amount: number) => {
+      if (!user) return;
+      const res = await fetch('/api/wallet', {
+          method: 'POST',
+          body: JSON.stringify({ userId: user.id, action, amount })
+      });
+      const data = await res.json();
+      if (data.balance !== undefined) setBalance(parseFloat(data.balance));
+      return data;
+  };
+
+  // Wrapped in useCallback to satisfy linter dependencies
+  const handleGameOver = useCallback(async (pHand: Card[], dHand: Card[], bet: number, blackjack = false) => {
     const pScore = calculateScore(pHand);
     const dScore = calculateScore(dHand);
     setGameState("gameOver");
 
-    if (blackjack) {
-      setMessage("BLACKJACK! Pays 3:2");
-      setBalance((prev) => prev + bet + (bet * 1.5));
-    } else if (pScore > 21) {
-      setMessage("BUST! Dealer Wins");
-    } else if (dScore > 21) {
-      setMessage("DEALER BUST! You Win");
-      setBalance((prev) => prev + (bet * 2));
-    } else if (pScore > dScore) {
-      setMessage("YOU WIN!");
-      setBalance((prev) => prev + (bet * 2));
-    } else if (pScore < dScore) {
-      setMessage("DEALER WINS");
-    } else {
-      setMessage("PUSH - Bet Returned");
-      setBalance((prev) => prev + bet);
-    }
-  }, []);
+    let winAmount = 0;
+    let msg = "";
 
-  const handleDeal = () => {
+    if (blackjack) {
+      msg = "BLACKJACK! Pays 3:2";
+      winAmount = bet + (bet * 1.5);
+    } else if (pScore > 21) {
+      msg = "BUST! Dealer Wins";
+      winAmount = 0;
+    } else if (dScore > 21) {
+      msg = "DEALER BUST! You Win";
+      winAmount = bet * 2;
+    } else if (pScore > dScore) {
+      msg = "YOU WIN!";
+      winAmount = bet * 2;
+    } else if (pScore < dScore) {
+      msg = "DEALER WINS";
+      winAmount = 0;
+    } else {
+      msg = "PUSH - Bet Returned";
+      winAmount = bet;
+    }
+
+    setMessage(msg);
+
+    // CALL DB IF WON
+    if (winAmount > 0 && user) {
+        // We use the raw fetch here to ensure we have the latest user ID from closure if needed, 
+        // though 'user' state is fine.
+        const res = await fetch('/api/wallet', {
+            method: 'POST',
+            body: JSON.stringify({ userId: user.id, action: 'payout', amount: winAmount })
+        });
+        const data = await res.json();
+        if (data.balance !== undefined) setBalance(parseFloat(data.balance));
+    }
+  }, [user]); // Added user dependency
+
+  const handleDeal = async () => {
     if (currentBet === 0) {
       setMessage("Please place a bet!");
       return;
     }
+
+    // --- DB CALL: DEDUCT BET ---
+    // Note: We already subtracted visually in 'addToBet', but we must confirm with DB.
+    const res = await fetch('/api/wallet', {
+        method: 'POST',
+        body: JSON.stringify({ userId: user.id, action: 'bet', amount: currentBet })
+    });
+    const data = await res.json();
+    
+    if (data.error) {
+        setMessage("Insufficient Funds in Wallet!");
+        return;
+    }
+    
+    // Sync balance with server (it should match your visual balance)
+    setBalance(data.balance);
+    // ---------------------------
 
     const newDeck = createDeck();
     const pHand = [newDeck.pop()!, newDeck.pop()!];
@@ -139,8 +212,8 @@ export default function BlackjackPage() {
         // Scenario A: BUST
         if (score > 21) {
             const timer = setTimeout(() => {
-                setGameState("gameOver");
-                setMessage("BUST! You went over 21.");
+                // Pass currentBet explicitly to avoid stale state issues in closures
+                handleGameOver(playerHand, dealerHand, currentBet);
             }, 500);
             return () => clearTimeout(timer);
         }
@@ -177,7 +250,7 @@ export default function BlackjackPage() {
       };
       playDealer();
     }
-  }, [gameState]); // Removed the failing eslint-disable comment
+  }, [gameState]); 
 
   const resetGame = () => {
     setPlayerHand([]);

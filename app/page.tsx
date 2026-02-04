@@ -9,7 +9,7 @@ export default function Home() {
       {/* Keeping this separate ensures the video does not bleed into it */}
       <header className="flex items-center justify-between px-6 py-4 bg-background z-20 shadow-sm relative">
         <span className="text-lg font-bold text-primary">LuckyBet</span>
-        {/* LINKED TO SIGNUP PAGE */}
+        {/* LINKED TO SIGNUP PAGE */} 
         <Link href="/signup">
             <Button size="sm">Sign Up</Button>
         </Link>
@@ -27,7 +27,7 @@ export default function Home() {
           playsInline
           className="absolute top-0 left-0 h-full w-full object-cover grayscale opacity-60"
         >
-          {/* Replace this src with your local file path, e.g., "/casino-bg.mp4" */}
+          
           <source 
             src="/41795-431406988_medium.mp4" 
             type="video/mp4" 
@@ -48,8 +48,8 @@ export default function Home() {
             Up to $500 on your first deposit
           </p>
           
-          {/* LINKED TO LOGIN PAGE (Changed from /Games to /Login) */}
-          <Link href="/Games">
+          {/* LINKED TO LOGIN PAGE */}
+          <Link href="/login">
             <Button size="lg" className="font-bold text-lg px-8 py-6">
               Play Now
             </Button>

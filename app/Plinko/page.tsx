@@ -2,9 +2,10 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // Added for redirect
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"; // Removed unused Card
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 // --- TYPES ---
 interface Ball {
@@ -47,10 +48,14 @@ const getSlotColor = (multiplier: number) => {
 };
 
 const PlinkoGame: React.FC = () => {
+  const router = useRouter();
+  
+  // --- STATE ---
+  const [user, setUser] = useState<any>(null); // Added User State
   const [mode, setMode] = useState<"manual" | "auto">("manual");
   const [risk, setRisk] = useState<"low" | "medium" | "high">("medium");
   const [betAmount, setBetAmount] = useState(1);
-  const [balance, setBalance] = useState(1000);
+  const [balance, setBalance] = useState(0); // Init 0, fetch later
   const [lastWin, setLastWin] = useState<number | null>(null);
   const [pegs, setPegs] = useState<Peg[]>([]);
   const [isAutoRunning, setIsAutoRunning] = useState(false);
@@ -70,11 +75,31 @@ const PlinkoGame: React.FC = () => {
   const balanceRef = useRef(balance);
   const betRef = useRef(betAmount);
 
+  // Sync refs with state
   useEffect(() => { balanceRef.current = balance; }, [balance]);
   useEffect(() => { betRef.current = betAmount; }, [betAmount]);
 
+  // --- 1. INITIAL LOAD (Fetch User & Balance) ---
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+        router.push("/Login");
+        return;
+    }
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
+    
+    fetch('/api/wallet', {
+        method: 'POST',
+        body: JSON.stringify({ userId: parsedUser.id, action: 'balance' })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.balance !== undefined) setBalance(parseFloat(data.balance));
+    });
+  }, []);
+
   // --- PC-OPTIMIZED DIMENSIONS ---
-  // We keep these large so PC looks crisp. Mobile will scale this down via CSS.
   const SPACING = 40; 
   const CANVAS_WIDTH = 800; 
   const CANVAS_HEIGHT = 60 + (rows * SPACING) + 60; 
@@ -87,7 +112,7 @@ const PlinkoGame: React.FC = () => {
 
   const multipliers = risk === "high" ? MULTIPLIERS.high : risk === "medium" ? MULTIPLIERS.medium : MULTIPLIERS.low;
 
-  // 1. Generate Pegs
+  // 2. Generate Pegs
   useEffect(() => {
     const newPegs: Peg[] = [];
     const startY = 60; 
@@ -107,32 +132,59 @@ const PlinkoGame: React.FC = () => {
     setPegs(newPegs);
   }, [rows]);
 
-  // 2. Drop Logic
-  const dropBall = useCallback(() => {
+  // 3. Drop Logic (Connected to DB)
+  const dropBall = useCallback(async () => {
+    // Optimistic check to prevent spamming if clearly broke
     if (balanceRef.current < betRef.current) {
         setIsAutoRunning(false);
         return;
     }
-    setBalance((prev) => prev - betRef.current);
 
-    const dropX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 10;
+    // Get latest user from local storage or state
+    const currentUser = user || JSON.parse(localStorage.getItem("user") || "{}");
+    if (!currentUser.id) return;
 
-    const newBall: Ball = {
-      id: ballIdRef.current++,
-      x: dropX,
-      y: 20, 
-      vx: (Math.random() - 0.5) * 2,
-      vy: 0,
-      active: true,
-      val: betRef.current,
-    };
+    // Call API to Deduct Bet
+    try {
+        const res = await fetch('/api/wallet', {
+            method: 'POST',
+            body: JSON.stringify({ userId: currentUser.id, action: 'bet', amount: betRef.current })
+        });
+        const data = await res.json();
 
-    ballsRef.current = [...ballsRef.current, newBall];
-  }, []);
+        if (data.error) {
+            setIsAutoRunning(false); // Stop auto if funds run out
+            return;
+        }
 
-  // 3. Auto Mode
+        // Update Balance from DB
+        setBalance(parseFloat(data.balance));
+
+        // Start Physics Ball
+        const dropX = CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 10;
+        const newBall: Ball = {
+            id: ballIdRef.current++,
+            x: dropX,
+            y: 20, 
+            vx: (Math.random() - 0.5) * 2,
+            vy: 0,
+            active: true,
+            val: betRef.current,
+        };
+
+        ballsRef.current = [...ballsRef.current, newBall];
+
+    } catch (err) {
+        console.error("Bet failed", err);
+        setIsAutoRunning(false);
+    }
+  }, [user]); // Depend on user
+
+  // 4. Auto Mode
   useEffect(() => {
     if (isAutoRunning && mode === "auto") {
+        // Note: dropBall is async, but setInterval doesn't wait. 
+        // This is fine, effectively firing "fire and forget" bet requests.
         autoIntervalRef.current = setInterval(dropBall, 200);
     } else {
         if (autoIntervalRef.current) clearInterval(autoIntervalRef.current);
@@ -142,7 +194,7 @@ const PlinkoGame: React.FC = () => {
 
   useEffect(() => setIsAutoRunning(false), [mode, risk]);
 
-  // 4. Game Loop
+  // 5. Game Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -183,7 +235,7 @@ const PlinkoGame: React.FC = () => {
         ctx.fill();
         
         ctx.fillStyle = "#000";
-        ctx.font = "bold 13px Arial"; // Slightly larger font for visibility when scaled down
+        ctx.font = "bold 13px Arial"; 
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(`${mult}x`, x, y + boxHeight/2 + 1);
@@ -192,7 +244,7 @@ const PlinkoGame: React.FC = () => {
       // Physics
       const updatedBalls = ballsRef.current.map((ball) => {
           if (!ball.active) return ball;
-          const newBall = { ...ball }; // Changed let to const per lint suggestion
+          const newBall = { ...ball }; 
 
           newBall.vy += GRAVITY;
           newBall.vx *= FRICTION;
@@ -222,6 +274,7 @@ const PlinkoGame: React.FC = () => {
             }
           });
 
+          // Check Slot Collision (WIN)
           if (newBall.y > slotY) {
              const relativeX = newBall.x - startX;
              const index = Math.floor(relativeX / SPACING);
@@ -229,16 +282,31 @@ const PlinkoGame: React.FC = () => {
              if (index >= 0 && index < multipliers.length) {
                  const multiplier = multipliers[index];
                  const win = newBall.val * multiplier;
-                 setBalance(prev => prev + win);
+                 
+                 // --- DB CALL: PAYOUT ---
+                 // We use the stored user from localstorage for reliability inside the loop
+                 const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+                 if (currentUser.id) {
+                     fetch('/api/wallet', {
+                         method: 'POST',
+                         body: JSON.stringify({ userId: currentUser.id, action: 'payout', amount: win })
+                     })
+                     .then(res => res.json())
+                     .then(data => {
+                         if (data.balance !== undefined) setBalance(parseFloat(data.balance));
+                     });
+                 }
+                 // -----------------------
+
                  setLastWin(win);
                  floatsRef.current.push({
-                    id: floatIdRef.current++,
-                    x: newBall.x,
-                    y: newBall.y - 20,
-                    text: `+$${win.toFixed(2)}`,
-                    color: win >= newBall.val ? "#22c55e" : "#ef4444",
-                    life: 1.0,
-                    alpha: 1
+                   id: floatIdRef.current++,
+                   x: newBall.x,
+                   y: newBall.y - 20,
+                   text: `+$${win.toFixed(2)}`,
+                   color: win >= newBall.val ? "#22c55e" : "#ef4444",
+                   life: 1.0,
+                   alpha: 1
                  });
              }
              newBall.active = false;
@@ -282,7 +350,7 @@ const PlinkoGame: React.FC = () => {
 
     animationRef.current = requestAnimationFrame(gameLoop);
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
-  }, [pegs, multipliers, rows, CANVAS_HEIGHT]);
+  }, [pegs, multipliers, rows, CANVAS_HEIGHT]); // Added dependency
 
   return (
     <div className="h-screen w-full bg-[#0b1120] flex flex-col font-sans text-white overflow-hidden">
@@ -297,8 +365,11 @@ const PlinkoGame: React.FC = () => {
         <div className="text-yellow-500 font-bold tracking-widest text-sm uppercase">
           Plinko
         </div>
-        <div className="bg-black/50 px-3 py-1 rounded-full border border-yellow-500/30 text-yellow-400 font-mono font-bold text-sm">
-           ${balance.toFixed(2)}
+        <div className="flex items-center gap-3">
+             <span className="text-stone-400 text-sm uppercase tracking-wider hidden sm:inline">Balance</span>
+             <div className="bg-black/50 px-3 py-1 rounded-full border border-yellow-500/30 text-yellow-400 font-mono font-bold text-sm">
+                ${balance.toFixed(2)}
+             </div>
         </div>
       </div>
 
@@ -378,12 +449,6 @@ const PlinkoGame: React.FC = () => {
         {/* ========================================================= */}
         <div className="flex-1 bg-[#0f1728] flex items-center justify-center p-2 lg:p-4 overflow-hidden relative">
             <div className="w-full h-full flex justify-center items-center">
-                {/* CANVAS SCALING:
-                   - Native Resolution: 800px (High Quality)
-                   - CSS Width: w-full (Shrinks to fit container)
-                   - CSS Height: h-auto (Maintains aspect ratio)
-                   - Max Width: 800px (Doesn't explode on massive screens)
-                */}
                 <canvas
                     ref={canvasRef}
                     width={CANVAS_WIDTH}
