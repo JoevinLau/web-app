@@ -28,6 +28,7 @@ export default function SignupPage() {
             return;
         }
 
+      
         alert(`Account created successfully! Welcome, ${username}.`);
         router.push("/Games");
 

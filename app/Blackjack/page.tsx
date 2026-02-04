@@ -65,7 +65,7 @@ export default function BlackjackPage() {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
-        router.push("/Login");
+        router.push("/login");
         return;
     }
     const parsedUser = JSON.parse(storedUser);
