@@ -71,7 +71,7 @@ export default function GamesPage() {
   const games = [
     { id: 1, name: "Blackjack", description: "Classic 21. Beat the dealer.", image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTvNEIn5RR7y2eJV8uF2tIvAHL2uApnB9RN3aJ6iR82&s", link: "/Blackjack" },
     { id: 2, name: "Glass Bridge", description: "50/50 Survival. Double your money or fall.", image: "", link: "/Glassfloor" },
-    { id: 3, name: "Plinko", description: "Every peg is a decision. Every drop is fate.", image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTS40ff7k3qG5m_cIMwv0S254kJhlV7hAziuQ&s", link: "/Plinko" }
+    //{ id: 3, name: "Plinko", description: "Every peg is a decision. Every drop is fate.", image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTS40ff7k3qG5m_cIMwv0S254kJhlV7hAziuQ&s", link: "/Plinko" }
   ];
 
   return (
